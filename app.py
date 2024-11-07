@@ -121,6 +121,46 @@ def get_current_round():
     
     return current_round
 
+def format_lyrics(lyrics, words=None):
+    """Format lyrics with proper line breaks and sections, highlighting used words"""
+    if not lyrics:
+        return ""
+    
+    # Convert words list to lowercase for case-insensitive matching
+    word_list = [word['word'].lower() for word in words] if words else []
+    
+    # Split lyrics into lines
+    lines = lyrics.split('\n')
+    formatted_lines = []
+    
+    for line in lines:
+        # Add double line break before section headers
+        if line.startswith('['):
+            if formatted_lines:  # Don't add extra line break at the start
+                formatted_lines.append('\n')
+            formatted_lines.append(f"**{line}**\n")  # Make sections bold with line break
+        else:
+            # Process words in the line
+            if word_list:
+                # Split line into words while preserving punctuation
+                words_in_line = line.split()
+                highlighted_words = []
+                for word in words_in_line:
+                    # Strip punctuation for matching but keep it for display
+                    clean_word = ''.join(c for c in word.lower() if c.isalnum())
+                    if clean_word in word_list:
+                        # Wrap the original word (with punctuation) in highlight span
+                        highlighted_words.append(f'<span style="background-color: yellow">{word}</span>')
+                    else:
+                        highlighted_words.append(word)
+                line = ' '.join(highlighted_words)
+            
+            formatted_lines.append(f"{line}\n")  # Add line break after each line
+    
+    # Join all lines
+    return ''.join(formatted_lines)
+
+
 def get_previous_rounds():
     """Get previous rounds sorted by votes"""
     previous_rounds = list(rounds_collection.find({'status': 'completed'}))
@@ -205,7 +245,7 @@ st.subheader('Previous Rounds')
 previous_rounds = get_previous_rounds()
 for round in previous_rounds:
     user_voted = st.session_state.user_id in [vote['user_id'] for vote in round.get('votes', [])]
-    with st.expander(f"Round #{round['round_number']} - {round['vote_count']} votes"):
+    with st.expander(f"Round #{round['round_number']} - {round['generated_songs'][0]['title']} - {round['vote_count']} votes"):
         round_words = words_collection.find({'round_id': round['_id']}).sort([('votes', -1)])
         words_list = list(round_words)
         if words_list:
@@ -221,22 +261,26 @@ for round in previous_rounds:
             # Display generated songs if available
             if 'generated_songs' in round:
                 songs = round['generated_songs']
+                    
+                if songs[0].get('lyric'):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        # Get words for this round for highlighting
+                        round_words = list(words_collection.find({'round_id': round['_id']}))
+                        formatted_lyrics = format_lyrics(songs[0]['lyric'], round_words)
+                        st.markdown(f"### Lyrics -  {songs[0]['title']}\n " + formatted_lyrics.replace('\n', '<br>'), unsafe_allow_html=True)
+                    with col2:
+                        st.image(songs[0]['image_url'])
                 
                 # Display Song 1
                 st.markdown('### Song 1')
-                if songs[0].get('lyric'):
-                    st.markdown("#### Lyrics")
-                    st.markdown(songs[0]['lyric'].replace('\n', '<br>'), unsafe_allow_html=True)
-                
+         
                 if songs[0].get('audio_url'):
                     st.audio(songs[0]['audio_url'])
                 
                 # Display Song 2
                 st.markdown('### Song 2')
-                if songs[1].get('lyric'):
-                    st.markdown("#### Lyrics")
-                    st.markdown(songs[1]['lyric'].replace('\n', '<br>'), unsafe_allow_html=True)
-                
+      
                 if songs[1].get('audio_url'):
                     st.audio(songs[1]['audio_url'])
 
