@@ -50,6 +50,33 @@ def add_word(word, current_round):
     )
     return True, "Word added successfully"
 
+def vote_for_song(round_id):
+    """Add user vote for a song in a completed round"""
+    round = rounds_collection.find_one({'_id': round_id})
+    if not round or 'generated_songs' not in round:
+        return False
+    
+    # Initialize votes array if it doesn't exist
+    if 'votes' not in round:
+        rounds_collection.update_one(
+            {'_id': round_id},
+            {'$set': {'votes': []}}
+        )
+        round['votes'] = []
+    
+    # Check if user already voted in this round
+    if st.session_state.user_id not in [vote['user_id'] for vote in round.get('votes', [])]:
+        vote = {
+            'user_id': st.session_state.user_id,
+            'timestamp': datetime.now(UTC)
+        }
+        rounds_collection.update_one(
+            {'_id': round_id},
+            {'$push': {'votes': vote}}
+        )
+        return True
+    return False
+
 def vote_for_word(word_id):
     """Add user vote for a word"""
     word = words_collection.find_one({'_id': word_id})
@@ -177,6 +204,7 @@ st.markdown('---')
 st.subheader('Previous Rounds')
 previous_rounds = get_previous_rounds()
 for round in previous_rounds:
+    user_voted = st.session_state.user_id in [vote['user_id'] for vote in round.get('votes', [])]
     with st.expander(f"Round #{round['round_number']} - {round['vote_count']} votes"):
         round_words = words_collection.find({'round_id': round['_id']}).sort([('votes', -1)])
         words_list = list(round_words)
@@ -211,5 +239,13 @@ for round in previous_rounds:
                 
                 if songs[1].get('audio_url'):
                     st.audio(songs[1]['audio_url'])
+
+                # Show vote button if user hasn't voted
+                if not user_voted:
+                    if st.button('👍 Vote for this round', key=f"vote_{round['_id']}"):
+                        if vote_for_song(round['_id']):
+                            st.rerun()
+                else:
+                    st.write('✅ You voted for this round')
         else:
             st.write("No words were added in this round")
